@@ -238,6 +238,9 @@ void Barrier(ID3D12GraphicsCommandList* c)
     c->ResourceBarrier(1, &b);
 }
 unsigned SyncMask(uint64_t tokens) { return S().candidate ? (tokens == 960 ? 7 : tokens == 2160 ? 5 : 0) : 0; }
+const std::map<uint64_t, fs::path>& ContractPaths();
+// The split-half contraction builds its Params at runtime, so it covers token counts without a vendor template.
+bool UseSplit(uint64_t tokens) { return S().candidate && (tokens == 960 || !ContractPaths().count(tokens)); }
 void ScratchBarrier(ID3D12GraphicsCommandList* c, uint64_t tokens, unsigned bit,
                     std::initializer_list<ID3D12Resource*> resources)
 {
@@ -518,14 +521,15 @@ void AllocateSession(Session& s, Device& d, ID3D12GraphicsCommandList* c)
     auto& uploadBatch = *new UploadBatch(dev);
     c = uploadBatch.cmd.Get();
     const uint64_t P = ((s.tokens + 127) / 128) * 128;
-    if (S().candidate && s.tokens == 960)
-        s.partials = Allocate(dev, 4ull * 960 * 1024 * 2);
+    if (UseSplit(s.tokens))
+        s.partials = Allocate(dev, 4ull * P * 1024 * 2);
     s.xp = Allocate(dev, P * 1024 / 2);
     s.xs = Allocate(dev, P * 1024 / 16);
     s.yp = Allocate(dev, P * 4096 / 2);
     s.ys = Allocate(dev, P * 4096 / 16);
     s.c = Allocate(dev, P * 1024 * 2);
-    s.cw = Allocate(dev, d.contracts.at(s.tokens).workspaceBytes);
+    auto contract = d.contracts.find(s.tokens);
+    s.cw = Allocate(dev, contract != d.contracts.end() ? contract->second.workspaceBytes : 256);
     s.zeroBytes = std::max<uint64_t>(s.partials.bytes, std::max<uint64_t>(P * 4096 / 2, s.cw.bytes));
     s.zero = Resource(dev, s.zeroBytes, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
     void* p = nullptr;
@@ -669,7 +673,7 @@ NvAPI_Status __cdecl Launch(ID3D12GraphicsCommandList* c, const NVAPI_CU_KERNEL_
                 throw std::runtime_error("Token count changed during pending pair");
         auto& cycle = s.sessions[{ c, t.device, tokens, s.candidate }];
         cycle.tokens = tokens;
-        const bool eligible = t.supported && ContractPaths().count(tokens);
+        const bool eligible = t.supported && (ContractPaths().count(tokens) || UseSplit(tokens));
         const auto fallback = [&]()
         {
             cycle.active = false;
@@ -721,7 +725,7 @@ NvAPI_Status __cdecl Launch(ID3D12GraphicsCommandList* c, const NVAPI_CU_KERNEL_
                         FusedInput input { (int) tokens,
                                            4096,
                                            1024,
-                                           170,
+                                           d.builder.smCount,
                                            cycle.xp.address(),
                                            d.weights.address() + w.ep,
                                            cycle.xs.address(),
@@ -742,7 +746,7 @@ NvAPI_Status __cdecl Launch(ID3D12GraphicsCommandList* c, const NVAPI_CU_KERNEL_
                             info.grid[2], info.block[0], info.block[1], info.block[2]);
                     }
                 }
-                if (s.candidate && tokens == 960)
+                if (UseSplit(tokens))
                     for (unsigned wi = 0; wi < 8; ++wi)
                     {
                         auto& w = d.w[wi];
@@ -750,10 +754,10 @@ NvAPI_Status __cdecl Launch(ID3D12GraphicsCommandList* c, const NVAPI_CU_KERNEL_
                         auto& info = cycle.splitInfo[wi];
                         if (blob.empty())
                         {
-                            FusedInput input { 960,
+                            FusedInput input { (int) tokens,
                                                1024,
                                                1024,
-                                               170,
+                                               d.splitBuilder.smCount,
                                                cycle.yp.address(),
                                                d.weights.address() + w.cp,
                                                cycle.ys.address(),
@@ -817,7 +821,7 @@ NvAPI_Status __cdecl Launch(ID3D12GraphicsCommandList* c, const NVAPI_CU_KERNEL_
         auto w = d.w[wi];
         uint64_t contractionOutput = cycle.c.address();
         auto epilogue = d.epilogue;
-        if (s.candidate && tokens == 960)
+        if (UseSplit(tokens))
         {
             auto& blob = cycle.splitParams[wi];
             auto& info = cycle.splitInfo[wi];

@@ -15,6 +15,7 @@ struct FusedBuilder
 {
     HMODULE helper = nullptr, driver = nullptr;
     void* ctx = nullptr;
+    int smCount = 0;
     int(__cdecl* build)(const FusedInput*, void*, uint64_t, FusedInfo*) = nullptr;
     int(__stdcall* push)(void*) = nullptr;
     int(__stdcall* pop)(void**) = nullptr;
@@ -46,6 +47,10 @@ struct FusedBuilder
         int device = 0;
         if (init(0) || deviceGet(&device, 0) || retain(&ctx, device))
             throw std::runtime_error("CUDA primary context unavailable for CPU TMA encoding");
+        // Persistent kernels are sized from this; it must match the GPU, not the RTX 5090 they were tuned on
+        auto getAttribute = sym<int(__stdcall*)(int*, int, int)>(driver, "cuDeviceGetAttribute");
+        if (getAttribute(&smCount, 16 /* CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT */, device) || smCount <= 0)
+            throw std::runtime_error("CUDA SM count unavailable");
     }
     void encode(const FusedInput& input, std::vector<unsigned char>& params, FusedInfo& info)
     {
