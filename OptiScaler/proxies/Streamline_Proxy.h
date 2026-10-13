@@ -409,7 +409,9 @@ class StreamlineProxy
 
         if (initResult == sl::Result::eOk)
         {
-            if (State::Instance().gameQuirks & GameQuirk::CreateSLOnThe2ndDevice)
+            // With ReShade loaded by us, init is deferred to FG swapchain creation (see HookToDevice), so the
+            // device is final here and hkD3D12CreateDevice will not set it later.
+            if (State::Instance().gameQuirks & GameQuirk::CreateSLOnThe2ndDevice && reshadeModule == nullptr)
             {
                 // slSetD3DDevice moved to hkD3D12CreateDevice
                 _isD3D12Inited = true;

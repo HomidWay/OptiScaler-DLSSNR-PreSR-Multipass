@@ -1427,7 +1427,8 @@ static HRESULT hkD3D12CreateDevice(IUnknown* pAdapter, D3D_FEATURE_LEVEL Minimum
         // if (Config::Instance()->UESpoofIntelAtomics64.value_or_default())
         //     UnhookDevice();
 
-        if (State::Instance().gameQuirks & GameQuirk::CreateSLOnThe2ndDevice)
+        // Not with ReShade loaded by us: *ppDevice is the raw device under its proxy (see HookToDevice)
+        if (State::Instance().gameQuirks & GameQuirk::CreateSLOnThe2ndDevice && reshadeModule == nullptr)
         {
             static void* lastDevice = nullptr;
 
