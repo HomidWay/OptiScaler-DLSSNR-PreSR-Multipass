@@ -3,6 +3,7 @@
 #include <Config.h>
 #include <resource_tracking/ResTrack_dx12.h>
 #include <magic_enum.hpp>
+#include <framegen/dlssg/DLSSG_Dx12.h>
 
 void Sl_Inputs_Dx12::CheckForFrame(IFGFeature_Dx12* fg, uint32_t frameId)
 {
@@ -241,6 +242,9 @@ bool Sl_Inputs_Dx12::setConstants(const sl::Constants& values, uint32_t frameId)
                                 reinterpret_cast<float*>(&data.cameraRight), reinterpret_cast<float*>(&data.cameraFwd));
 
         fgOutput->SetReset(data.reset == sl::Boolean::eTrue);
+
+        if (auto dlssg = dynamic_cast<DLSSG_Dx12*>(fgOutput); dlssg != nullptr)
+            dlssg->SetGameConstants(data);
 
         fgOutput->SetFrameTimeDelta(static_cast<float>(State::Instance().lastFGFrameTime));
     }

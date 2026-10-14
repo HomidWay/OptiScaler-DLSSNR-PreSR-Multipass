@@ -489,6 +489,24 @@ bool DLSSG_Dx12::Dispatch()
         memcpy(&constData.prevClipToClip, &temp, sizeof(sl::float4x4));
     }
 
+    // Prefer the game's own camera matrices when it provided them through Streamline.
+    // The rebuilt ones above are zero (camera position given) or have identity clipToPrevClip,
+    // which breaks DLSSG's camera motion estimation, most visibly at the screen edges.
+    if (_hasGameConstants[fIndex])
+    {
+        const auto& game = _gameConstants[fIndex];
+        constData.cameraViewToClip = game.cameraViewToClip;
+        constData.clipToCameraView = game.clipToCameraView;
+        constData.clipToLensClip = game.clipToLensClip;
+        constData.clipToPrevClip = game.clipToPrevClip;
+        constData.prevClipToClip = game.prevClipToClip;
+        constData.cameraPinholeOffset = game.cameraPinholeOffset;
+        constData.cameraPos = game.cameraPos;
+        constData.cameraUp = game.cameraUp;
+        constData.cameraRight = game.cameraRight;
+        constData.cameraFwd = game.cameraFwd;
+    }
+
     constData.cameraAspectRatio = _cameraAspectRatio[fIndex];
     constData.cameraFOV = _cameraVFov[fIndex];
     constData.cameraNear = _cameraNear[fIndex];
@@ -1198,4 +1216,36 @@ bool DLSSG_Dx12::ReleaseSwapchain(HWND hwnd)
     }
 
     return true;
+}
+
+void DLSSG_Dx12::SetGameConstants(const sl::Constants& constants, int index)
+{
+    if (index < 0)
+        index = GetIndex();
+
+    // Some games (e.g. RTX Remix based) pass empty or identity matrices, keep the rebuilt ones then
+    // (sl::float4 defaults to INVALID_FLOAT, so compare against plain arrays)
+    float zero[16] = {};
+    float identity[16] = {};
+    identity[0] = identity[5] = identity[10] = identity[15] = 1.0f;
+    const auto& m = constants.cameraViewToClip;
+
+    bool usable = memcmp(&m, zero, sizeof(zero)) != 0 && memcmp(&m, identity, sizeof(identity)) != 0 &&
+                  m[0].x != sl::INVALID_FLOAT && m[1].y != sl::INVALID_FLOAT &&
+                  constants.clipToPrevClip[0].x != sl::INVALID_FLOAT;
+
+    static bool logged = false;
+    if (!logged)
+    {
+        logged = true;
+        LOG_INFO("Game camera matrices {}", usable ? "usable, forwarding to DLSSG" : "unusable, using rebuilt ones");
+        LOG_INFO("viewToClip diag: {} {} {} [2].w: {} [3].z: {}, clipToPrevClip row0: {} {} {} {}", m[0].x, m[1].y,
+                 m[2].z, m[2].w, m[3].z, constants.clipToPrevClip[0].x, constants.clipToPrevClip[0].y,
+                 constants.clipToPrevClip[0].z, constants.clipToPrevClip[0].w);
+    }
+
+    _hasGameConstants[index] = usable;
+
+    if (usable)
+        _gameConstants[index] = constants;
 }

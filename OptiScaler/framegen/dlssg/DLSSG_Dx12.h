@@ -17,6 +17,10 @@ class DLSSG_Dx12 : public virtual IFGFeature_Dx12
     ID3D12Fence* dlssgFence[BUFFER_COUNT] = {};
     UINT64 lastOptionFrame = 0;
 
+    // Constants the game passed through Streamline (only set when FG input is DLSSG)
+    sl::Constants _gameConstants[BUFFER_COUNT] {};
+    bool _hasGameConstants[BUFFER_COUNT] {};
+
     bool Dispatch();
 
   protected:
@@ -24,6 +28,8 @@ class DLSSG_Dx12 : public virtual IFGFeature_Dx12
     void CreateObjects(ID3D12Device* InDevice) override final;
 
   public:
+    void SetGameConstants(const sl::Constants& constants, int index = -1);
+
     // IFGFeature
     const char* Name() override final { return "DLSSG"; };
     feature_version Version() override final;
