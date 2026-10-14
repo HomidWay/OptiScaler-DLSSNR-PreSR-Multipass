@@ -1169,15 +1169,21 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
     // time: generated frames get spread over seconds and the game waits on them, so it never recovers.
     // Turning FG off and on again fixes it, so do that automatically: pause FG on a hitch and keep it paused
     // until frame times are back to normal.
+    // Resuming while the game is still loading/streaming runs straight into the next hitch, so only resume
+    // after a stretch of normal frames, the way turning FG back on manually after the load does.
     static bool hitchRecovery = false;
     static bool hitchPaused = false; // the pause only takes effect in the next EvaluateState
+    static double hitchStableSince = 0.0;
     if (fg != nullptr && willPresent && state.lastFGFrameTime > 0.0)
     {
+        const double now = Util::MillisecondsNow();
+
         if (!hitchRecovery && fg->IsActive() && !fg->IsPaused() && state.lastFGFrameTime > 250.0)
         {
             LOG_WARN("Frame took {:.0f} ms with FG active, pausing FG to reset pacing", state.lastFGFrameTime);
             hitchRecovery = true;
             hitchPaused = false;
+            hitchStableSince = now;
             state.fgChanged = true;
         }
         else if (hitchRecovery)
@@ -1186,10 +1192,13 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
                 hitchPaused = true;
 
             if (state.lastFGFrameTime > 50.0)
-                fg->UpdateTarget(); // stay paused for another 10 frames
+                hitchStableSince = now;
+
+            if (now - hitchStableSince < 5000.0)
+                fg->UpdateTarget(); // stay paused until frames have been normal for 5 s
             else if (hitchPaused && fg->IsActive() && !fg->IsPaused())
             {
-                LOG_INFO("Frame times normal again, FG resumed");
+                LOG_INFO("Frame times normal for 5 s, FG resumed");
                 hitchRecovery = false;
             }
         }
