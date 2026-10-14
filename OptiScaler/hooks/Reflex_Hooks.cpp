@@ -69,8 +69,50 @@ static bool SkipSleepAfterHitch()
 }
 
 // Calls the real Reflex sleep (or skips it), logging how long it blocked every 5 s
-static NvAPI_Status DoReflexSleep(IUnknown* pDev, decltype(&NvAPI_D3D_Sleep) sleepFn)
+// Every 10 s, log the driver's per-frame latency reports (last 64 frames), times in us
+static void DumpLatencyReports(IUnknown* pDev, decltype(&NvAPI_D3D_GetLatency) getLatencyFn)
 {
+    static double lastDump = 0.0;
+    const double now = Util::MillisecondsNow();
+
+    if (getLatencyFn == nullptr || now - lastDump < 10000.0)
+        return;
+
+    lastDump = now;
+
+    static NV_LATENCY_RESULT_PARAMS* results = new NV_LATENCY_RESULT_PARAMS();
+    memset(results, 0, sizeof(NV_LATENCY_RESULT_PARAMS));
+    results->version = NV_LATENCY_RESULT_PARAMS_VER;
+
+    if (auto result = getLatencyFn(pDev, results); result != NVAPI_OK)
+    {
+        LOG_WARN("Latency report: GetLatency failed: {}", magic_enum::enum_name(result));
+        return;
+    }
+
+    const auto base = results->frameReport[0].simStartTime;
+    auto d = [](NvU64 a, NvU64 b) -> int64_t { return (a == 0 || b == 0) ? -1 : (int64_t) (b - a); };
+    auto r = [base](NvU64 a) -> int64_t { return (a == 0 || base == 0) ? -1 : (int64_t) (a - base); };
+
+    LOG_INFO("Latency report: id simStart sim submitStart submit present driver osQueue gpuStart gpuRender "
+             "gpuActive gpuFrame");
+
+    for (int i = 0; i < 64; i++)
+    {
+        const auto& f = results->frameReport[i];
+        LOG_INFO("LR {} {} {} {} {} {} {} {} {} {} {} {}", f.frameID, r(f.simStartTime), d(f.simStartTime, f.simEndTime),
+                 r(f.renderSubmitStartTime), d(f.renderSubmitStartTime, f.renderSubmitEndTime),
+                 d(f.presentStartTime, f.presentEndTime), d(f.driverStartTime, f.driverEndTime),
+                 d(f.osRenderQueueStartTime, f.osRenderQueueEndTime), r(f.gpuRenderStartTime),
+                 d(f.gpuRenderStartTime, f.gpuRenderEndTime), f.gpuActiveRenderTimeInUs, f.gpuFrameTimeInUs);
+    }
+}
+
+static NvAPI_Status DoReflexSleep(IUnknown* pDev, decltype(&NvAPI_D3D_Sleep) sleepFn,
+                                  decltype(&NvAPI_D3D_GetLatency) getLatencyFn)
+{
+    DumpLatencyReports(pDev, getLatencyFn);
+
     if (SkipSleepAfterHitch() || Config::Instance()->ReflexSkipSleep.value_or_default())
         return NVAPI_OK;
 
@@ -138,7 +180,7 @@ NvAPI_Status ReflexHooks::hkNvAPI_D3D_Sleep(IUnknown* pDev)
         else
         {
             _lastSleepDev = pDev;
-            return DoReflexSleep(pDev, o_NvAPI_D3D_Sleep);
+            return DoReflexSleep(pDev, o_NvAPI_D3D_Sleep, o_NvAPI_D3D_GetLatency);
         }
     }
 
@@ -146,7 +188,7 @@ NvAPI_Status ReflexHooks::hkNvAPI_D3D_Sleep(IUnknown* pDev)
         return nvapi_calls::NvAPI_D3D_Sleep(pDev);
 
     _lastSleepDev = pDev;
-    return DoReflexSleep(pDev, o_NvAPI_D3D_Sleep);
+    return DoReflexSleep(pDev, o_NvAPI_D3D_Sleep, o_NvAPI_D3D_GetLatency);
 }
 
 NvAPI_Status ReflexHooks::hkNvAPI_D3D_GetLatency(IUnknown* pDev, NV_LATENCY_RESULT_PARAMS* pGetLatencyParams)
