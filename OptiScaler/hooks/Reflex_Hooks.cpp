@@ -68,6 +68,47 @@ static bool SkipSleepAfterHitch()
     return skipping;
 }
 
+// Calls the real Reflex sleep (or skips it), logging how long it blocked every 5 s
+static NvAPI_Status DoReflexSleep(IUnknown* pDev, decltype(&NvAPI_D3D_Sleep) sleepFn)
+{
+    if (SkipSleepAfterHitch() || Config::Instance()->ReflexSkipSleep.value_or_default())
+        return NVAPI_OK;
+
+    static double windowStart = 0.0;
+    static double sum = 0.0;
+    static double sumSq = 0.0;
+    static double maxMs = 0.0;
+    static uint32_t count = 0;
+    static uint32_t over5ms = 0;
+
+    const double start = Util::MillisecondsNow();
+    auto result = sleepFn(pDev);
+    const double ms = Util::MillisecondsNow() - start;
+
+    if (windowStart == 0.0)
+        windowStart = start;
+
+    sum += ms;
+    sumSq += ms * ms;
+    maxMs = (std::max)(maxMs, ms);
+    count++;
+    if (ms > 5.0)
+        over5ms++;
+
+    if (start - windowStart >= 5000.0 && count > 0)
+    {
+        const double mean = sum / count;
+        const double stdev = std::sqrt((std::max)(0.0, sumSq / count - mean * mean));
+        LOG_INFO("Reflex sleep last 5 s: calls {}, mean {:.2f} ms, stdev {:.2f} ms, max {:.2f} ms, >5 ms {}", count,
+                 mean, stdev, maxMs, over5ms);
+        windowStart = start;
+        sum = sumSq = maxMs = 0.0;
+        count = over5ms = 0;
+    }
+
+    return result;
+}
+
 NvAPI_Status ReflexHooks::hkNvAPI_D3D_Sleep(IUnknown* pDev)
 {
 #ifdef LOG_REFLEX_CALLS
@@ -97,7 +138,7 @@ NvAPI_Status ReflexHooks::hkNvAPI_D3D_Sleep(IUnknown* pDev)
         else
         {
             _lastSleepDev = pDev;
-            return SkipSleepAfterHitch() ? NVAPI_OK : o_NvAPI_D3D_Sleep(pDev);
+            return DoReflexSleep(pDev, o_NvAPI_D3D_Sleep);
         }
     }
 
@@ -105,7 +146,7 @@ NvAPI_Status ReflexHooks::hkNvAPI_D3D_Sleep(IUnknown* pDev)
         return nvapi_calls::NvAPI_D3D_Sleep(pDev);
 
     _lastSleepDev = pDev;
-    return SkipSleepAfterHitch() ? NVAPI_OK : o_NvAPI_D3D_Sleep(pDev);
+    return DoReflexSleep(pDev, o_NvAPI_D3D_Sleep);
 }
 
 NvAPI_Status ReflexHooks::hkNvAPI_D3D_GetLatency(IUnknown* pDev, NV_LATENCY_RESULT_PARAMS* pGetLatencyParams)

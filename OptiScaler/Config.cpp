@@ -278,6 +278,7 @@ bool Config::Reload(std::filesystem::path iniPath)
         // Framerate
         {
             FramerateLimit.set_from_config(readFloat("Framerate", "FramerateLimit"));
+            ReflexSkipSleep.set_from_config(readBool("Framerate", "SkipReflexSleep"));
         }
 
         // FSR Common
@@ -1221,6 +1222,8 @@ bool Config::SaveIni()
     {
         ini.SetValue("Framerate", "FramerateLimit",
                      GetFloatValue(Instance()->FramerateLimit.value_for_config()).c_str());
+        ini.SetValue("Framerate", "SkipReflexSleep",
+                     GetBoolValue(Instance()->ReflexSkipSleep.value_for_config()).c_str());
     }
 
     // Output Scaling

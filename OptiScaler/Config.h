@@ -934,6 +934,7 @@ class Config
 
     // Framerate
     CustomOptional<float> FramerateLimit { 0.0f };
+    CustomOptional<bool> ReflexSkipSleep { false };
 
     // HDR
     CustomOptional<bool> ForceHDR { false };

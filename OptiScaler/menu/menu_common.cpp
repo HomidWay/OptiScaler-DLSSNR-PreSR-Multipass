@@ -5189,6 +5189,16 @@ void MenuCommon::RenderFramerateSettings(RenderMenuContext& ctx)
             config->FramerateLimit = _limitFps;
         }
 
+        if (bool skipSleep = config->ReflexSkipSleep.value_or_default();
+            ImGui::Checkbox("Skip Reflex sleep", &skipSleep))
+        {
+            config->ReflexSkipSleep = skipSleep;
+        }
+        ShowHelpMarker("Don't wait in the driver's Reflex latency sleep.\n"
+                       "Reflex markers are still sent, so DLSS FG keeps working.\n"
+                       "May give more even frame pacing at the cost of some latency.\n"
+                       "The FPS limit above is applied through this sleep, so it won't work while skipped.");
+
         ImGui::Spacing();
         if (auto ch = ScopedCollapsingHeader("VRR Frame Cap Calculator"); ch.IsHeaderOpen())
         {
