@@ -94,17 +94,16 @@ static void DumpLatencyReports(IUnknown* pDev, decltype(&NvAPI_D3D_GetLatency) g
     auto d = [](NvU64 a, NvU64 b) -> int64_t { return (a == 0 || b == 0) ? -1 : (int64_t) (b - a); };
     auto r = [base](NvU64 a) -> int64_t { return (a == 0 || base == 0) ? -1 : (int64_t) (a - base); };
 
-    LOG_INFO("Latency report: id simStart sim submitStart submit present driver osQueue gpuStart gpuRender "
-             "gpuActive gpuFrame");
+    LOG_INFO("Latency report: id simStart sim submitStart submit present driver osQueue gpuStart gpuRender");
 
     for (int i = 0; i < 64; i++)
     {
         const auto& f = results->frameReport[i];
-        LOG_INFO("LR {} {} {} {} {} {} {} {} {} {} {} {}", f.frameID, r(f.simStartTime), d(f.simStartTime, f.simEndTime),
+        LOG_INFO("LR {} {} {} {} {} {} {} {} {} {}", f.frameID, r(f.simStartTime), d(f.simStartTime, f.simEndTime),
                  r(f.renderSubmitStartTime), d(f.renderSubmitStartTime, f.renderSubmitEndTime),
                  d(f.presentStartTime, f.presentEndTime), d(f.driverStartTime, f.driverEndTime),
                  d(f.osRenderQueueStartTime, f.osRenderQueueEndTime), r(f.gpuRenderStartTime),
-                 d(f.gpuRenderStartTime, f.gpuRenderEndTime), f.gpuActiveRenderTimeInUs, f.gpuFrameTimeInUs);
+                 d(f.gpuRenderStartTime, f.gpuRenderEndTime));
     }
 }
 
