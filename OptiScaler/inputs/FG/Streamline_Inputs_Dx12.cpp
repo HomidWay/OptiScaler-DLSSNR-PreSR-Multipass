@@ -229,6 +229,9 @@ bool Sl_Inputs_Dx12::setConstants(const sl::Constants& values, uint32_t frameId)
         // But UE games and Dead Rising expect that multiplication to be done, even if the scale is 1.0.
         // bool multiplyByResolution = dataCopy.mvecScale.x != 1.f || dataCopy.mvecScale.y != 1.f;
         bool multiplyByResolution = true;
+        LOG_DEBUG("SL consts mvecScale: {}x{} mvs: {}x{} jitter: {}x{} reset: {}", data.mvecScale.x,
+                  data.mvecScale.y, mvsWidth, mvsHeight, data.jitterOffset.x, data.jitterOffset.y,
+                  (int) data.reset);
         if (multiplyByResolution)
             fgOutput->SetMVScale(data.mvecScale.x * mvsWidth, data.mvecScale.y * mvsHeight);
         else
@@ -321,8 +324,14 @@ bool Sl_Inputs_Dx12::reportResource(const sl::ResourceTag& tag, ID3D12GraphicsCo
     Dx12Resource res = {};
     res.resource = d3dRes;
     res.cmdList = cmdBuffer; // Critical for eOnlyValidNow
+    res.left = tag.extent ? tag.extent.left : 0;
+    res.top = tag.extent ? tag.extent.top : 0;
     res.width = tag.extent ? tag.extent.width : desc.Width;
     res.height = tag.extent ? tag.extent.height : desc.Height;
+
+    LOG_DEBUG("SL tag type: {} res: {:X} desc: {}x{} fmt: {} extent: {},{} {}x{} frameId: {}", tag.type,
+              (size_t) d3dRes, desc.Width, desc.Height, (UINT) desc.Format, res.left, res.top, res.width, res.height,
+              frameId);
     res.state = (D3D12_RESOURCE_STATES) tag.resource->state;
     res.validity =
         (tag.lifecycle == sl::eValidUntilPresent) ? FG_ResourceValidity::UntilPresent : FG_ResourceValidity::ValidNow;
