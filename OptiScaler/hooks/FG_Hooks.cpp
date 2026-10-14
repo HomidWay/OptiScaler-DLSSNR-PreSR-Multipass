@@ -1170,19 +1170,24 @@ HRESULT FGHooks::FGPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags,
     // Turning FG off and on again fixes it, so do that automatically: pause FG on a hitch and keep it paused
     // until frame times are back to normal.
     static bool hitchRecovery = false;
+    static bool hitchPaused = false; // the pause only takes effect in the next EvaluateState
     if (fg != nullptr && willPresent && state.lastFGFrameTime > 0.0)
     {
         if (!hitchRecovery && fg->IsActive() && !fg->IsPaused() && state.lastFGFrameTime > 250.0)
         {
             LOG_WARN("Frame took {:.0f} ms with FG active, pausing FG to reset pacing", state.lastFGFrameTime);
             hitchRecovery = true;
+            hitchPaused = false;
             state.fgChanged = true;
         }
         else if (hitchRecovery)
         {
+            if (!fg->IsActive() || fg->IsPaused())
+                hitchPaused = true;
+
             if (state.lastFGFrameTime > 50.0)
                 fg->UpdateTarget(); // stay paused for another 10 frames
-            else if (fg->IsActive() && !fg->IsPaused())
+            else if (hitchPaused && fg->IsActive() && !fg->IsPaused())
             {
                 LOG_INFO("Frame times normal again, FG resumed");
                 hitchRecovery = false;

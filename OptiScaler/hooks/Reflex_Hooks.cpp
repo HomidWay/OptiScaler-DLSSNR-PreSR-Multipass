@@ -40,6 +40,27 @@ NvAPI_Status ReflexHooks::hkNvAPI_D3D_SetSleepMode(IUnknown* pDev, NV_SET_SLEEP_
     return o_NvAPI_D3D_SetSleepMode(pDev, pSetSleepModeParams);
 }
 
+// The driver sizes the Reflex sleep from recent frame times. After a multi-second hitch (loading a save with
+// FG on) it sleeps for seconds, which makes the next frame just as long, and the game never recovers.
+// Skip the sleep while frames are that slow; it resumes once frame times are normal again.
+static bool SkipSleepAfterHitch()
+{
+    const bool skip = State::Instance().lastFGFrameTime > 100.0;
+    static bool skipping = false;
+
+    if (skip != skipping)
+    {
+        skipping = skip;
+        if (skip)
+            LOG_WARN("Frame took {:.0f} ms, skipping Reflex sleep until frame times recover",
+                     State::Instance().lastFGFrameTime);
+        else
+            LOG_INFO("Frame times normal again, Reflex sleep resumed");
+    }
+
+    return skip;
+}
+
 NvAPI_Status ReflexHooks::hkNvAPI_D3D_Sleep(IUnknown* pDev)
 {
 #ifdef LOG_REFLEX_CALLS
@@ -69,7 +90,7 @@ NvAPI_Status ReflexHooks::hkNvAPI_D3D_Sleep(IUnknown* pDev)
         else
         {
             _lastSleepDev = pDev;
-            return o_NvAPI_D3D_Sleep(pDev);
+            return SkipSleepAfterHitch() ? NVAPI_OK : o_NvAPI_D3D_Sleep(pDev);
         }
     }
 
@@ -77,7 +98,7 @@ NvAPI_Status ReflexHooks::hkNvAPI_D3D_Sleep(IUnknown* pDev)
         return nvapi_calls::NvAPI_D3D_Sleep(pDev);
 
     _lastSleepDev = pDev;
-    return o_NvAPI_D3D_Sleep(pDev);
+    return SkipSleepAfterHitch() ? NVAPI_OK : o_NvAPI_D3D_Sleep(pDev);
 }
 
 NvAPI_Status ReflexHooks::hkNvAPI_D3D_GetLatency(IUnknown* pDev, NV_LATENCY_RESULT_PARAMS* pGetLatencyParams)
