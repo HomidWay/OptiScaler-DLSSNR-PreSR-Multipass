@@ -5580,6 +5580,78 @@ void MenuCommon::RenderActiveImageSettings(RenderMenuContext& ctx)
 
     bool rcasEnabled = false;
 
+    // Only a config setting: it changes the resolution reported to the game, so it must not depend on an
+    // active upscaler. Shown here as well when the upscaler is missing or frozen (e.g. game paused).
+    auto renderUpscaleRatioOverride = [&]()
+    {
+        // UPSCALE RATIO OVERRIDE -----------------
+
+        auto minSliderLimit = config->ExtendedLimits.value_or_default() ? 0.1f : 1.0f;
+        auto maxSliderLimit = config->ExtendedLimits.value_or_default() ? 6.0f : 3.0f;
+
+        ImGui::SeparatorText("Upscale Ratio Override");
+
+        if (bool upOverride = config->UpscaleRatioOverrideEnabled.value_or_default();
+            ImGui::Checkbox("Override all", &upOverride))
+        {
+            config->UpscaleRatioOverrideEnabled = upOverride;
+
+            if (upOverride)
+                config->QualityRatioOverrideEnabled = false;
+        }
+        ShowHelpMarker("Overrides every upscaler preset with the set value\n\n"
+                       "1.5x on a 1080p screen means an internal res of 720p\n"
+                       "1080 / 1.5 = 720");
+
+        if (bool qOverride = config->QualityRatioOverrideEnabled.value_or_default();
+            ImGui::Checkbox("Override per quality preset", &qOverride))
+        {
+            config->QualityRatioOverrideEnabled = qOverride;
+
+            if (qOverride)
+                config->UpscaleRatioOverrideEnabled = false;
+        }
+
+        ShowHelpMarker("Lets you override each preset's ratio individually\n"
+                       "Note that not every game supports every quality preset\n\n"
+                       "1.5x on a 1080p screen means internal resolution of 720p\n"
+                       "1080 / 1.5 = 720");
+
+        if (config->UpscaleRatioOverrideEnabled.value_or_default())
+        {
+            float urOverride = config->UpscaleRatioOverrideValue.value_or_default();
+            ImGui::SliderFloat("All Ratios", &urOverride, minSliderLimit, maxSliderLimit, "%.3f");
+            config->UpscaleRatioOverrideValue = urOverride;
+        }
+
+        if (config->QualityRatioOverrideEnabled.value_or_default())
+        {
+            float qDlaa = config->QualityRatio_DLAA.value_or_default();
+            if (ImGui::SliderFloat("DLAA", &qDlaa, minSliderLimit, maxSliderLimit, "%.3f"))
+                config->QualityRatio_DLAA = qDlaa;
+
+            float qUq = config->QualityRatio_UltraQuality.value_or_default();
+            if (ImGui::SliderFloat("Ultra Quality", &qUq, minSliderLimit, maxSliderLimit, "%.3f"))
+                config->QualityRatio_UltraQuality = qUq;
+
+            float qQ = config->QualityRatio_Quality.value_or_default();
+            if (ImGui::SliderFloat("Quality", &qQ, minSliderLimit, maxSliderLimit, "%.3f"))
+                config->QualityRatio_Quality = qQ;
+
+            float qB = config->QualityRatio_Balanced.value_or_default();
+            if (ImGui::SliderFloat("Balanced", &qB, minSliderLimit, maxSliderLimit, "%.3f"))
+                config->QualityRatio_Balanced = qB;
+
+            float qP = config->QualityRatio_Performance.value_or_default();
+            if (ImGui::SliderFloat("Performance", &qP, minSliderLimit, maxSliderLimit, "%.3f"))
+                config->QualityRatio_Performance = qP;
+
+            float qUp = config->QualityRatio_UltraPerformance.value_or_default();
+            if (ImGui::SliderFloat("Ultra Performance", &qUp, minSliderLimit, maxSliderLimit, "%.3f"))
+                config->QualityRatio_UltraPerformance = qUp;
+        }
+    };
+
     if (currentFeature != nullptr && !currentFeature->IsFrozen())
     {
         // SHARPNESS -----------------------------
@@ -5838,72 +5910,7 @@ void MenuCommon::RenderActiveImageSettings(RenderMenuContext& ctx)
             ImGui::EndDisabled();
         }
 
-        // UPSCALE RATIO OVERRIDE -----------------
-
-        auto minSliderLimit = config->ExtendedLimits.value_or_default() ? 0.1f : 1.0f;
-        auto maxSliderLimit = config->ExtendedLimits.value_or_default() ? 6.0f : 3.0f;
-
-        ImGui::SeparatorText("Upscale Ratio Override");
-
-        if (bool upOverride = config->UpscaleRatioOverrideEnabled.value_or_default();
-            ImGui::Checkbox("Override all", &upOverride))
-        {
-            config->UpscaleRatioOverrideEnabled = upOverride;
-
-            if (upOverride)
-                config->QualityRatioOverrideEnabled = false;
-        }
-        ShowHelpMarker("Overrides every upscaler preset with the set value\n\n"
-                       "1.5x on a 1080p screen means an internal res of 720p\n"
-                       "1080 / 1.5 = 720");
-
-        if (bool qOverride = config->QualityRatioOverrideEnabled.value_or_default();
-            ImGui::Checkbox("Override per quality preset", &qOverride))
-        {
-            config->QualityRatioOverrideEnabled = qOverride;
-
-            if (qOverride)
-                config->UpscaleRatioOverrideEnabled = false;
-        }
-
-        ShowHelpMarker("Lets you override each preset's ratio individually\n"
-                       "Note that not every game supports every quality preset\n\n"
-                       "1.5x on a 1080p screen means internal resolution of 720p\n"
-                       "1080 / 1.5 = 720");
-
-        if (config->UpscaleRatioOverrideEnabled.value_or_default())
-        {
-            float urOverride = config->UpscaleRatioOverrideValue.value_or_default();
-            ImGui::SliderFloat("All Ratios", &urOverride, minSliderLimit, maxSliderLimit, "%.3f");
-            config->UpscaleRatioOverrideValue = urOverride;
-        }
-
-        if (config->QualityRatioOverrideEnabled.value_or_default())
-        {
-            float qDlaa = config->QualityRatio_DLAA.value_or_default();
-            if (ImGui::SliderFloat("DLAA", &qDlaa, minSliderLimit, maxSliderLimit, "%.3f"))
-                config->QualityRatio_DLAA = qDlaa;
-
-            float qUq = config->QualityRatio_UltraQuality.value_or_default();
-            if (ImGui::SliderFloat("Ultra Quality", &qUq, minSliderLimit, maxSliderLimit, "%.3f"))
-                config->QualityRatio_UltraQuality = qUq;
-
-            float qQ = config->QualityRatio_Quality.value_or_default();
-            if (ImGui::SliderFloat("Quality", &qQ, minSliderLimit, maxSliderLimit, "%.3f"))
-                config->QualityRatio_Quality = qQ;
-
-            float qB = config->QualityRatio_Balanced.value_or_default();
-            if (ImGui::SliderFloat("Balanced", &qB, minSliderLimit, maxSliderLimit, "%.3f"))
-                config->QualityRatio_Balanced = qB;
-
-            float qP = config->QualityRatio_Performance.value_or_default();
-            if (ImGui::SliderFloat("Performance", &qP, minSliderLimit, maxSliderLimit, "%.3f"))
-                config->QualityRatio_Performance = qP;
-
-            float qUp = config->QualityRatio_UltraPerformance.value_or_default();
-            if (ImGui::SliderFloat("Ultra Performance", &qUp, minSliderLimit, maxSliderLimit, "%.3f"))
-                config->QualityRatio_UltraPerformance = qUp;
-        }
+        renderUpscaleRatioOverride();
 
         if (currentFeature != nullptr && !currentFeature->IsFrozen())
         {
@@ -6170,6 +6177,10 @@ void MenuCommon::RenderActiveImageSettings(RenderMenuContext& ctx)
                 }
             }
         }
+    }
+    else
+    {
+        renderUpscaleRatioOverride();
     }
 }
 

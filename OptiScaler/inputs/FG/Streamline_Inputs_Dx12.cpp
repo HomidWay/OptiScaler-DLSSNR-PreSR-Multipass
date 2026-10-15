@@ -3,6 +3,7 @@
 #include <Config.h>
 #include <resource_tracking/ResTrack_dx12.h>
 #include <magic_enum.hpp>
+#include <framegen/dlssg/DLSSG_Dx12.h>
 
 void Sl_Inputs_Dx12::CheckForFrame(IFGFeature_Dx12* fg, uint32_t frameId)
 {
@@ -239,6 +240,9 @@ bool Sl_Inputs_Dx12::setConstants(const sl::Constants& values, uint32_t frameId)
 
         fgOutput->SetReset(data.reset == sl::Boolean::eTrue);
 
+        if (auto dlssg = dynamic_cast<DLSSG_Dx12*>(fgOutput); dlssg != nullptr)
+            dlssg->SetGameConstants(data);
+
         fgOutput->SetFrameTimeDelta(static_cast<float>(State::Instance().lastFGFrameTime));
     }
     else
@@ -321,8 +325,11 @@ bool Sl_Inputs_Dx12::reportResource(const sl::ResourceTag& tag, ID3D12GraphicsCo
     Dx12Resource res = {};
     res.resource = d3dRes;
     res.cmdList = cmdBuffer; // Critical for eOnlyValidNow
+    res.left = tag.extent ? tag.extent.left : 0;
+    res.top = tag.extent ? tag.extent.top : 0;
     res.width = tag.extent ? tag.extent.width : desc.Width;
     res.height = tag.extent ? tag.extent.height : desc.Height;
+
     res.state = (D3D12_RESOURCE_STATES) tag.resource->state;
     res.validity =
         (tag.lifecycle == sl::eValidUntilPresent) ? FG_ResourceValidity::UntilPresent : FG_ResourceValidity::ValidNow;

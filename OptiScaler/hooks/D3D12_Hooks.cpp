@@ -1540,7 +1540,8 @@ static HRESULT hkD3D12CreateDevice(IUnknown* pAdapter, D3D_FEATURE_LEVEL Minimum
         // if (Config::Instance()->UESpoofIntelAtomics64.value_or_default())
         //     UnhookDevice();
 
-        if (State::Instance().gameQuirks & GameQuirk::CreateSLOnThe2ndDevice)
+        // Not with ReShade loaded by us: *ppDevice is the raw device under its proxy (see HookToDevice)
+        if (State::Instance().gameQuirks & GameQuirk::CreateSLOnThe2ndDevice && reshadeModule == nullptr)
         {
             static void* lastDevice = nullptr;
 
@@ -2311,7 +2312,13 @@ static void HookToDevice(ID3D12Device* InDevice)
         ResTrack_Dx12::HookDevice(InDevice);
     }
 
-    if (State::Instance().activeFgOutput == FGOutput::DLSSG && StreamlineProxy::LoadStreamline())
+    // When we loaded ReShade, it hooks D3D12CreateDevice after us and wraps our result, so InDevice is
+    // the raw device underneath its proxy. Initialising Streamline with it makes NGX create heaps and
+    // the DLSSG swapchain on objects ReShade never saw (crash in its ClearUnorderedAccessView* wrappers,
+    // swapchain skipped). DLSSG_Dx12::CreateSwapchain1 initialises Streamline later with the device
+    // behind the game's command queue instead.
+    if (State::Instance().activeFgOutput == FGOutput::DLSSG && reshadeModule == nullptr &&
+        StreamlineProxy::LoadStreamline())
     {
         StreamlineProxy::InitWithD3D12(InDevice);
     }
